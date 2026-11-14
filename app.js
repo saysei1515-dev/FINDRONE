@@ -20,7 +20,7 @@ const connStatus = document.getElementById("connectionStatus");
 // ==========================================
 // 🔑 【ここに先ほどコピーしたAPIキーを貼り付けてください】
 // ==========================================
-const GEMINI_API_KEY = "ここにコピーしたAPIキーを貼り付けてください";
+const GEMINI_API_KEY = "";
 
 // 初期化
 status.innerText = "ステータス: 準備完了（Gemini API連携モード）";
