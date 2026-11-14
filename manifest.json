@@ -1,6 +1,6 @@
 {
   "name": "FINDRONE",
-  "short_name": "物体探知アプリ",
+  "short_name": "FINDRONE",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#121212",
