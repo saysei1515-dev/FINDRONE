@@ -94,7 +94,7 @@ window.stopCamera = function() {
   status.innerText = "ステータス: 停止しました";
 };
 
-// ================= リアルタイム推論ループ (Renderサーバー経由) =================
+// ================= リアルタイム推論ループ =================
 async function predictWebcam() {
   if (!webcamRunning) return;
   
@@ -111,7 +111,7 @@ async function predictWebcam() {
     lastVideoTime = video.currentTime;
     
     const now = Date.now();
-    // 約3秒に1回サーバーへ画像を送信
+    // 約3秒に1回サーバーへ送信
     if (now - lastSaveTime > 3000) {
       lastSaveTime = now;
       try {
@@ -122,7 +122,6 @@ async function predictWebcam() {
         tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
         const base64Image = tempCanvas.toDataURL("image/jpeg").split(",")[1];
 
-        // Renderサーバーを経由してGemini APIを呼び出し
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -167,16 +166,11 @@ async function predictWebcam() {
   }
 }
 
-// Renderサーバー経由でリクエストを送る関数
+// サーバー経由でリクエストを送る関数
 async function detectObjectWithGemini(base64Image, searchQuery) {
   try {
-    const byteString = atob(base64Image);
-    const arrayBuffer = new ArrayBuffer(byteString.length);
-    const intArray = new Uint8Array(arrayBuffer);
-    for (let i = 0; i < byteString.length; i++) {
-      intArray[i] = byteString.charCodeAt(i);
-    }
-    const blob = new Blob([intArray], { type: "image/jpeg" });
+    const res = await fetch(`data:image/jpeg;base64,${base64Image}`);
+    const blob = await res.blob();
 
     const formData = new FormData();
     formData.append("file", blob, "image.jpg");
@@ -187,6 +181,11 @@ async function detectObjectWithGemini(base64Image, searchQuery) {
       body: formData
     });
     
+    if (!response.ok) {
+      console.error("サーバー応答エラー:", response.status);
+      return [];
+    }
+
     const data = await response.json();
     return Array.isArray(data) ? data : [];
   } catch (err) {
