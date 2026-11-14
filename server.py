@@ -15,8 +15,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# YOLO-Worldモデルの読み込み
-model = YOLO("yolov8s-world.pt")
+# より軽量なNanoモデルに変更（Renderのメモリ制限対策）
+model = YOLO("yolov8n-world.pt")
 
 # 検知したいカスタムクラスを事前に設定
 model.set_classes(["red box", "person", "drone", "target"])
