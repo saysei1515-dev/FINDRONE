@@ -1,5 +1,5 @@
 {
-  "name": "FINDRONE (YOLO)",
+  "name": "FINDRONE",
   "short_name": "物体探知アプリ",
   "start_url": "./index.html",
   "display": "standalone",
