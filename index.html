@@ -3,45 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FINDRONE Gemini Object Detection</title>
-  <!-- PeerJSのCDN -->
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <title>FINDRONE - AI 探索カメラ (Gemini連携)</title>
   <link rel="stylesheet" href="style.css">
+  <!-- PeerJS & QRスキャナーCDN (不要なMediaPipeやTF.jsはサーバー中継に合わせクリーンアップ) -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
-  <!-- アプリのUI本体（既存のレイアウト構造に合わせてお使いください） -->
-  <div class="container">
-    <h1>FINDRONE - AI 探索カメラ</h1>
-    <div id="status" style="color: #00ff00; font-weight: bold;">ステータス: 初期化中...</div>
-    
-    <!-- カメラ映像とキャンバスの重ね合わせ領域 -->
-    <div class="video-container" style="position: relative; display: inline-block;">
-      <video id="video" autoplay playsinline style="width: 100%; max-width: 600px; display: block;"></video>
-      <canvas id="outputCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+  <div class="app-container">
+    <h1>🔍 AI探偵カメラ (Gemini連携)</h1>
+    <!-- 🔗 モード切り替えタブ -->
+    <div class="tab-menu">
+      <button class="tab-btn active" onclick="switchTab('search')">🔍 探索モード</button>
+      <button class="tab-btn" onclick="switchTab('register')" style="display:none;">📦 物体登録モード</button>
     </div>
+    <!-- ================= 探索モード画面 ================= -->
+    <div id="searchTab" class="tab-content active">
+      <div class="control-group" style="border: 2px solid #007bff; background: #f0f7ff;">
+        <label for="pcIdInput" style="color: #007bff;">🔗 PC接続用ID:</label>
+        <div style="display: flex; gap: 5px; margin-bottom: 8px;">
+          <input type="text" id="pcIdInput" placeholder="PC側のIDを入力 or QRスキャン" style="flex: 1;">
+          <button onclick="connectToPC()" style="padding: 0 15px; background: #007bff; color: #fff; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">接続</button>
+        </div>
+        <!-- 📷 QRコードスキャンボタン & 停止ボタン -->
+        <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+          <button onclick="startQrScanner()" style="flex: 1; padding: 8px; background: #28a745; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px;">📷 QRスキャン起動</button>
+          <button onclick="stopQrScanner()" style="flex: 1; padding: 8px; background: #6c757d; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px;">⏹️ カメラ停止</button>
+        </div>
+        <div id="qr-reader" style="width: 100%; max-width: 260px; margin: 10px auto; display: none;"></div>
+        <div id="connectionStatus" style="font-size: 12px; color: #666; margin-top: 5px;">ステータス: 未接続</div>
+      </div>
+      <div class="control-group" style="position: relative;">
+        <label for="targetObject">探すもの (例: 赤い鞄, 男の人):</label>
+        <div style="display: flex; gap: 5px;">
+          <input type="text" id="targetObject" value="赤い財布" placeholder="例: 赤い財布" autocomplete="off" style="flex: 1;">
+          <button onclick="updateTarget()" style="padding: 0 15px; background: #007bff; color: #fff; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">決定</button>
+        </div>
+        <div id="quickSelectList" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;"></div>
+      </div>
 
-    <!-- コントロール群 -->
-    <div class="controls">
-      <input type="text" id="pcIdInput" placeholder="PCの接続IDを入力">
-      <button onclick="connectToPC()">PCに接続</button>
-      <br><br>
-      <input type="text" id="targetObject" placeholder="探すもの（例：赤い鞄、男の人）" value="赤い財布">
-      <button onclick="updateTarget()">ターゲット更新</button>
-      <br><br>
-      <button id="startButton" onclick="startCamera()" disabled>遠隔カメラ起動 & 探索スタート</button>
-      <button id="stopButton" onclick="stopCamera()" style="display:none;">探索停止</button>
+      <div class="camera-container" style="position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden;">
+        <video id="video" autoplay muted playsinline style="width: 100%; display: block;"></video>
+        <canvas id="outputCanvas" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+      </div>
+      <div class="button-group" style="margin-top: 10px;">
+        <button id="startButton" class="primary-btn" onclick="startCamera()" disabled>PCと接続してください</button>
+        <button id="stopButton" class="danger-btn" onclick="stopCamera()" style="display:none;">停止</button>
+      </div>
+      <div id="status" class="status-box">ステータス: 初期化中...</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+        <h3 style="margin: 0; font-size: 14px;">📁 発見したアイテムの履歴</h3>
+        <button onclick="clearGallery()" style="padding: 5px 10px; background: #dc3545; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">履歴クリア</button>
+      </div>
+      <div id="imageGallery" class="gallery" style="display: flex; gap: 10px; overflow-x: auto; padding: 10px 0;"></div>
     </div>
-
-    <!-- 検出履歴ギャラリー -->
-    <div id="imageGallery" style="display: flex; gap: 10px; overflow-x: auto; margin-top: 20px;"></div>
   </div>
 
-  <!-- プレビューモーダル -->
-  <div id="imagePreviewModal" style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center;" onclick="closePreview()">
-    <img id="previewImage" style="max-width:90%; max-height:90%; border-radius:8px;">
-  </div>
+  <!-- QRスキャナー制御用スクリプト -->
+  <script>
+    let html5QrCode = null;
+    function startQrScanner() {
+      const readerContainer = document.getElementById("qr-reader");
+      readerContainer.style.display = "block";
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("qr-reader");
+      }
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 200, height: 200 } },
+        (decodedText) => {
+          document.getElementById("pcIdInput").value = decodedText;
+          stopQrScanner();
+          alert("PCのIDを読み込みました！「接続」ボタンを押してください。");
+        },
+        (errorMessage) => {}
+      ).catch(err => {
+        alert("カメラの起動に失敗しました: " + err);
+      });
+    }
+    function stopQrScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          const readerContainer = document.getElementById("qr-reader");
+          readerContainer.style.display = "none";
+        }).catch(err => {
+          console.error("QRスキャナーの停止に失敗しました:", err);
+        });
+      }
+    }
+  </script>
 
-  <!-- スクリプトの読み込み（type="module" は不要です） -->
+  <!-- 標準スクリプトとして app.js を読み込み（type="module" を外し、SyntaxErrorを完全に防止） -->
   <script src="app.js"></script>
+
+  <!-- 🔍 画像プレビュー用モーダル -->
+  <div id="imagePreviewModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; flex-direction: column;" onclick="closePreview()">
+    <img id="previewImage" style="max-width: 90%; max-height: 80%; border-radius: 8px; border: 3px solid #00ff00; object-fit: contain;">
+    <div style="color: #fff; margin-top: 15px; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 4px;">画面をタップして閉じる</div>
+  </div>
 </body>
 </html>
