@@ -1,5 +1,3 @@
-import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2";
-
 let webcamRunning = false;
 let lastVideoTime = -1;
 let currentSearchWord = "赤い財布";
@@ -17,13 +15,8 @@ const startButton = document.getElementById("startButton");
 const stopButton = document.getElementById("stopButton");
 const connStatus = document.getElementById("connectionStatus");
 
-// ==========================================
-// 🔑 【ここに先ほどコピーしたAPIキーを貼り付けてください】
-// ==========================================
-const GEMINI_API_KEY = "";
-
 // 初期化
-status.innerText = "ステータス: 準備完了（Gemini API連携モード）";
+status.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
 status.style.color = "#00ff00";
 
 // タブ切り替え
@@ -101,7 +94,7 @@ window.stopCamera = function() {
   status.innerText = "ステータス: 停止しました";
 };
 
-// ================= リアルタイム推論ループ (Gemini API連携) =================
+// ================= リアルタイム推論ループ (Renderサーバー経由) =================
 async function predictWebcam() {
   if (!webcamRunning) return;
   
@@ -118,11 +111,10 @@ async function predictWebcam() {
     lastVideoTime = video.currentTime;
     
     const now = Date.now();
-    // APIの負荷や速度を考慮し、約3秒に1回Geminiに画像を送信して判定します
+    // 約3秒に1回サーバーへ画像を送信
     if (now - lastSaveTime > 3000) {
       lastSaveTime = now;
       try {
-        // ビデオの現在のフレームを一時的なキャンバスに描画して画像データ(Base64)に変換
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = video.videoWidth;
         tempCanvas.height = video.videoHeight;
@@ -130,7 +122,7 @@ async function predictWebcam() {
         tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
         const base64Image = tempCanvas.toDataURL("image/jpeg").split(",")[1];
 
-        // Gemini APIを呼び出し
+        // Renderサーバーを経由してGemini APIを呼び出し
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -143,7 +135,6 @@ async function predictWebcam() {
           const scaleY = canvas.height / video.videoHeight;
 
           detections.forEach(det => {
-            // Geminiから返ってくる座標は [ymin, xmin, ymax, xmax] (0〜1000の正規化座標)
             const [ymin, xmin, ymax, xmax] = det.box_2d;
             const x = (xmin / 1000) * video.videoWidth * scaleX;
             const y = (ymin / 1000) * video.videoHeight * scaleY;
@@ -160,14 +151,13 @@ async function predictWebcam() {
             ctx.fillText(det.label || currentSearchWord, x + 5, y > 25 ? y - 7 : 18);
           });
 
-          // 発見した画像を履歴に追加
           addGalleryThumbnail(tempCanvas.toDataURL("image/jpeg"));
         } else {
           status.innerText = `🔍 「${currentSearchWord}」を探索中...`;
           status.style.color = "#aaa";
         }
       } catch (err) {
-        console.error("Gemini API通信エラー:", err);
+        console.error("サーバー通信エラー:", err);
       }
     }
   }
@@ -177,48 +167,30 @@ async function predictWebcam() {
   }
 }
 
-// Gemini APIへリクエストを送る関数
+// Renderサーバー経由でリクエストを送る関数
 async function detectObjectWithGemini(base64Image, searchQuery) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-  const prompt = `この画像の中から「${searchQuery}」を探してください。
-見つかった場合は、その物体の位置をバウンディングボックス（左上と右下の座標、0から1000の正規化座標）で示し、次のJSON形式だけで正確に答えてください。余計な文章は一切含めないこと。
-フォーマット例:
-[{"box_2d": [ymin, xmin, ymax, xmax], "label": "${searchQuery}"}]
-見つからない場合は空の配列 [] を返してください。`;
-
-  const requestBody = {
-    contents: [
-      {
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: "image/jpeg",
-              data: base64Image
-            }
-          }
-        ]
-      }
-    ]
-  };
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody)
-  });
-
-  const data = await response.json();
-  if (!data.candidates || data.candidates.length === 0) return [];
-
-  const textResult = data.candidates[0].content.parts[0].text;
-  const cleanJson = textResult.replace(/```json/g, "").replace(/```/g, "").trim();
-  
   try {
-    return JSON.parse(cleanJson);
-  } catch (e) {
-    console.error("JSONパース失敗:", cleanJson);
+    const byteString = atob(base64Image);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const intArray = new Uint8Array(arrayBuffer);
+    for (let i = 0; i < byteString.length; i++) {
+      intArray[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([intArray], { type: "image/jpeg" });
+
+    const formData = new FormData();
+    formData.append("file", blob, "image.jpg");
+    formData.append("query", searchQuery);
+
+    const response = await fetch('/detect-gemini', {
+      method: "POST",
+      body: formData
+    });
+    
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error("fetchエラー:", err);
     return [];
   }
 }
