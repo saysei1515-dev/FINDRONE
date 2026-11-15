@@ -25,15 +25,15 @@ if GEMINI_API_KEY:
 async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured on server")
-    
+
     try:
         image_bytes = await file.read()
         if not image_bytes:
             return []
 
-        # 正式な高速軽量モデル "gemini-1.5-flash" を使用
-        model = genai.GenerativeModel("models/gemini-1.5-flash")
-        
+        # モデル名を最新の flash モデルに変更
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
         prompt = f"""この画像の中から「{query}」を探してください。
 見つかった場合は、その物体の位置をバウンディングボックス（左上と右下の座標、0から1000の正規化座標）で示し、次のJSON配列の形式だけで正確に答えてください。余計な文章は一切含めないこと。
 フォーマット例:
@@ -44,10 +44,10 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
             [prompt, {"mime_type": "image/jpeg", "data": image_bytes}],
             generation_config={"response_mime_type": "application/json"}
         )
-        
+
         text_result = response.text
         clean_json = re.sub(r"```json|```", "", text_result).strip()
-        
+
         return json.loads(clean_json)
     except Exception as e:
         print("Gemini Server Error:", str(e))
