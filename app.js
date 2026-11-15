@@ -6,14 +6,14 @@ let lastSaveTime = 0;
 let peer = null;
 let conn = null;
 
-let video, canvas, ctx, status, startButton, stopButton, connStatus;
+let video, canvas, ctx, statusBox, startButton, stopButton, connStatus;
 
 // ページ全体の読み込みが完了してから安全に初期化を実行
 window.addEventListener('DOMContentLoaded', () => {
   video = document.getElementById("video");
   canvas = document.getElementById("outputCanvas");
   if (canvas) ctx = canvas.getContext("2d");
-  status = document.getElementById("status");
+  statusBox = document.getElementById("status");
   startButton = document.getElementById("startButton");
   stopButton = document.getElementById("stopButton");
   connStatus = document.getElementById("connectionStatus");
@@ -34,9 +34,9 @@ window.addEventListener('DOMContentLoaded', () => {
           webcamRunning = true;
           if (startButton) startButton.style.display = "none";
           if (stopButton) stopButton.style.display = "block";
-          if (status) {
-            status.innerText = `ステータス: 「${currentSearchWord}」を探索中...`;
-            status.style.color = "#00ff00";
+          if (statusBox) {
+            statusBox.innerText = `ステータス: 「${currentSearchWord}」を探索中...`;
+            statusBox.style.color = "#00ff00";
           }
           video.onloadeddata = () => { predictWebcam(); };
         }
@@ -46,9 +46,9 @@ window.addEventListener('DOMContentLoaded', () => {
     console.error("Peer初期化失敗:", e);
   }
 
-  if (status) {
-    status.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
-    status.style.color = "#00ff00";
+  if (statusBox) {
+    statusBox.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
+    statusBox.style.color = "#00ff00";
   }
 });
 
@@ -85,9 +85,9 @@ window.connectToPC = function() {
       startButton.disabled = false;
       startButton.innerText = "遠隔カメラ起動 & 探索スタート";
     }
-    if (status) {
-      status.innerText = "ステータス: 準備完了";
-      status.style.color = "#00ff00";
+    if (statusBox) {
+      statusBox.innerText = "ステータス: 準備完了";
+      statusBox.style.color = "#00ff00";
     }
   });
 };
@@ -99,9 +99,9 @@ window.updateTarget = function() {
   const inputVal = targetObj.value.trim();
   if (!inputVal) { alert("探すものを入力してください！"); return; }
   currentSearchWord = inputVal;
-  if (status) {
-    status.innerText = `🎯 「${currentSearchWord}」を探します`;
-    status.style.color = "#00ff00";
+  if (statusBox) {
+    statusBox.innerText = `🎯 「${currentSearchWord}」を探します`;
+    statusBox.style.color = "#00ff00";
   }
 };
 
@@ -117,7 +117,7 @@ window.startCamera = function() {
   if (!conn || !conn.open) { alert("先にPCと接続してください！"); return; }
   currentSearchWord = inputVal;
   conn.send({ action: 'start', keyword: currentSearchWord, smartphoneId: peer.id });
-  if (status) status.innerText = "ステータス: 遠隔カメラ起動要求を送信中...";
+  if (statusBox) statusBox.innerText = "ステータス: 遠隔カメラ起動要求を送信中...";
 };
 
 window.stopCamera = function() {
@@ -128,7 +128,7 @@ window.stopCamera = function() {
   if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (stopButton) stopButton.style.display = "none";
   if (startButton) startButton.style.display = "block";
-  if (status) status.innerText = "ステータス: 停止しました";
+  if (statusBox) statusBox.innerText = "ステータス: 停止しました";
 };
 
 // ================= リアルタイム推論ループ =================
@@ -163,9 +163,9 @@ async function predictWebcam() {
         if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (detections && detections.length > 0) {
-          if (status) {
-            status.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
-            status.style.color = "#00ff00";
+          if (statusBox) {
+            statusBox.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
+            statusBox.style.color = "#00ff00";
           }
 
           const scaleX = canvas.width / video.videoWidth;
@@ -190,9 +190,9 @@ async function predictWebcam() {
 
           addGalleryThumbnail(tempCanvas.toDataURL("image/jpeg"));
         } else {
-          if (status) {
-            status.innerText = `🔍 「${currentSearchWord}」を探索中...`;
-            status.style.color = "#aaa";
+          if (statusBox) {
+            statusBox.innerText = `🔍 「${currentSearchWord}」を探索中...`;
+            statusBox.style.color = "#aaa";
           }
         }
       } catch (err) {
