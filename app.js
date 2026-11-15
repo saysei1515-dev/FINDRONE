@@ -3,21 +3,57 @@ let lastVideoTime = -1;
 let currentSearchWord = "赤い財布";
 let lastSaveTime = 0; 
 
-// PeerJS初期化
-const peer = new Peer();
+let peer = null;
 let conn = null;
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("outputCanvas");
-const ctx = canvas.getContext("2d");
-const status = document.getElementById("status");
-const startButton = document.getElementById("startButton");
-const stopButton = document.getElementById("stopButton");
-const connStatus = document.getElementById("connectionStatus");
+let video, canvas, ctx, status, startButton, stopButton, connStatus;
 
-// 初期化
-status.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
-status.style.color = "#00ff00";
+// ページ全体の読み込みが完了してから初期化を実行する（これでフリーズを防止）
+window.addEventListener('DOMContentLoaded', () => {
+  // DOM要素の取得
+  video = document.getElementById("video");
+  canvas = document.getElementById("outputCanvas");
+  if (canvas) ctx = canvas.getContext("2d");
+  status = document.getElementById("status");
+  startButton = document.getElementById("startButton");
+  stopButton = document.getElementById("stopButton");
+  connStatus = document.getElementById("connectionStatus");
+
+  // PeerJS初期化（安全に例外処理）
+  try {
+    peer = new Peer();
+    peer.on('open', (id) => {
+      console.log("PeerJS Connected, ID:", id);
+    });
+    peer.on('error', (err) => {
+      console.error("PeerJSエラー:", err);
+    });
+    peer.on('call', (call) => {
+      call.answer();
+      call.on('stream', (remoteStream) => {
+        if (video) {
+          video.srcObject = remoteStream;
+          webcamRunning = true;
+          if (startButton) startButton.style.display = "none";
+          if (stopButton) stopButton.style.display = "block";
+          if (status) {
+            status.innerText = `ステータス: 「${currentSearchWord}」を探索中...`;
+            status.style.color = "#00ff00";
+          }
+          video.onloadeddata = () => { predictWebcam(); };
+        }
+      });
+    });
+  } catch (e) {
+    console.error("Peer初期化失敗:", e);
+  }
+
+  // 初期化完了メッセージ
+  if (status) {
+    status.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
+    status.style.color = "#00ff00";
+  }
+});
 
 // タブ切り替え
 window.switchTab = function(tabName) {
@@ -34,71 +70,75 @@ window.switchTab = function(tabName) {
 
 // PC接続
 window.connectToPC = function() {
-  const pcId = document.getElementById("pcIdInput").value.trim();
+  const pcIdInput = document.getElementById("pcIdInput");
+  if (!pcIdInput) return;
+  const pcId = pcIdInput.value.trim();
   if (!pcId) { alert("PCのIDを入力してください！"); return; }
-  connStatus.innerText = "ステータス: 接続中...";
+  if (connStatus) {
+    connStatus.innerText = "ステータス: 接続中...";
+    connStatus.style.color = "#ffc107";
+  }
   conn = peer.connect(pcId);
   conn.on('open', () => {
-    connStatus.innerText = "ステータス: 接続完了 ✅";
-    connStatus.style.color = "#28a745";
-    startButton.disabled = false;
-    startButton.innerText = "遠隔カメラ起動 & 探索スタート";
-    status.innerText = "ステータス: 準備完了";
-    status.style.color = "#00ff00";
+    if (connStatus) {
+      connStatus.innerText = "ステータス: 接続完了 ✅";
+      connStatus.style.color = "#28a745";
+    }
+    if (startButton) {
+      startButton.disabled = false;
+      startButton.innerText = "遠隔カメラ起動 & 探索スタート";
+    }
+    if (status) {
+      status.innerText = "ステータス: 準備完了";
+      status.style.color = "#00ff00";
+    }
   });
 };
-
-peer.on('call', (call) => {
-  call.answer();
-  call.on('stream', (remoteStream) => {
-    video.srcObject = remoteStream;
-    webcamRunning = true;
-    startButton.style.display = "none";
-    stopButton.style.display = "block";
-    status.innerText = `ステータス: 「${currentSearchWord}」を探索中...`;
-    status.style.color = "#00ff00";
-    video.onloadeddata = () => { predictWebcam(); };
-  });
-});
 
 // 探す言葉の更新
 window.updateTarget = function() {
-  const inputVal = document.getElementById("targetObject").value.trim();
+  const targetObj = document.getElementById("targetObject");
+  if (!targetObj) return;
+  const inputVal = targetObj.value.trim();
   if (!inputVal) { alert("探すものを入力してください！"); return; }
   currentSearchWord = inputVal;
-  status.innerText = `🎯 「${currentSearchWord}」を探します`;
-  status.style.color = "#00ff00";
+  if (status) {
+    status.innerText = `🎯 「${currentSearchWord}」を探します`;
+    status.style.color = "#00ff00";
+  }
 };
 
 window.startCamera = function() {
-  const inputVal = document.getElementById("targetObject").value.trim();
+  const targetObj = document.getElementById("targetObject");
+  if (!targetObj) return;
+  const inputVal = targetObj.value.trim();
   if (!inputVal) {
     alert("探すものを入力してください！");
-    document.getElementById("targetObject").focus();
+    targetObj.focus();
     return;
   }
   if (!conn || !conn.open) { alert("先にPCと接続してください！"); return; }
   currentSearchWord = inputVal;
   conn.send({ action: 'start', keyword: currentSearchWord, smartphoneId: peer.id });
-  status.innerText = "ステータス: 遠隔カメラ起動要求を送信中...";
+  if (status) status.innerText = "ステータス: 遠隔カメラ起動要求を送信中...";
 };
 
 window.stopCamera = function() {
   if (conn && conn.open) conn.send({ action: 'stop' });
   webcamRunning = false;
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  video.srcObject = null;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  stopButton.style.display = "none";
-  startButton.style.display = "block";
-  status.innerText = "ステータス: 停止しました";
+  if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  if (video) video.srcObject = null;
+  if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (stopButton) stopButton.style.display = "none";
+  if (startButton) startButton.style.display = "block";
+  if (status) status.innerText = "ステータス: 停止しました";
 };
 
 // ================= リアルタイム推論ループ =================
 async function predictWebcam() {
   if (!webcamRunning) return;
 
-  if (video.videoWidth > 0 && video.videoHeight > 0) {
+  if (video && video.videoWidth > 0 && video.videoHeight > 0) {
     const displayWidth = video.clientWidth;
     const displayHeight = video.clientHeight;
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
@@ -107,11 +147,10 @@ async function predictWebcam() {
     }
   }
 
-  if (video.currentTime !== lastVideoTime) {
+  if (video && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
 
     const now = Date.now();
-    // 約3秒に1回サーバーへ送信
     if (now - lastSaveTime > 3000) {
       lastSaveTime = now;
       try {
@@ -124,11 +163,13 @@ async function predictWebcam() {
 
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (detections && detections.length > 0) {
-          status.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
-          status.style.color = "#00ff00";
+          if (status) {
+            status.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
+            status.style.color = "#00ff00";
+          }
 
           const scaleX = canvas.width / video.videoWidth;
           const scaleY = canvas.height / video.videoHeight;
@@ -152,8 +193,10 @@ async function predictWebcam() {
 
           addGalleryThumbnail(tempCanvas.toDataURL("image/jpeg"));
         } else {
-          status.innerText = `🔍 「${currentSearchWord}」を探索中...`;
-          status.style.color = "#aaa";
+          if (status) {
+            status.innerText = `🔍 「${currentSearchWord}」を探索中...`;
+            status.style.color = "#aaa";
+          }
         }
       } catch (err) {
         console.error("サーバー通信エラー:", err);
@@ -166,7 +209,6 @@ async function predictWebcam() {
   }
 }
 
-// サーバー経由でリクエストを送る関数
 async function detectObjectWithGemini(base64Image, searchQuery) {
   try {
     const res = await fetch(`data:image/jpeg;base64,${base64Image}`);
@@ -187,8 +229,6 @@ async function detectObjectWithGemini(base64Image, searchQuery) {
     }
 
     const result = await response.json();
-    console.log("Geminiからの受信データ:", result);
-
     return Array.isArray(result) ? result : [];
   } catch (err) {
     console.error("fetchエラー:", err);
@@ -196,7 +236,6 @@ async function detectObjectWithGemini(base64Image, searchQuery) {
   }
 }
 
-// 履歴画像ギャラリー
 function addGalleryThumbnail(dataUrl) {
   const gallery = document.getElementById("imageGallery");
   if (!gallery) return;
@@ -220,5 +259,6 @@ window.closePreview = function() {
 };
 
 window.clearGallery = function() {
-  document.getElementById("imageGallery").innerHTML = "";
+  const gallery = document.getElementById("imageGallery");
+  if (gallery) gallery.innerHTML = "";
 };
