@@ -180,6 +180,8 @@ async function detectObjectWithGemini(base64Image, searchQuery) {
       method: "POST",
       body: formData
     });
+    const result = await response.json();
+console.log("Geminiからの受信データ:", result);
     
     if (!response.ok) {
       console.error("サーバー応答エラー:", response.status);
