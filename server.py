@@ -30,7 +30,7 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
         if not image_bytes:
             return []
 
-        # 安定したGeminiモデルを指定
+        # ユーザー様ご指定のモデル名に確実に合わせる
         model = genai.GenerativeModel("models/gemini-3.8-flash")
 
         prompt = f"""この画像の中から「{query}」を探してください。
@@ -39,17 +39,28 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
 [{{"box_2d": [ymin, xmin, ymax, xmax], "label": "{query}"}}]
 見つからない場合は空の配列 [] を返してください。"""
 
+        print(f"📡 Gemini (3.8-flash) に問い合わせ中... 検索ワード: {query}")
+
+        # 最新モデルに合わせたシンプルな呼び出し形式
         response = model.generate_content(
-            [prompt, {"mime_type": "image/jpeg", "data": image_bytes}],
-            generation_config={"response_mime_type": "application/json"}
+            [prompt, {"mime_type": "image/jpeg", "data": image_bytes}]
         )
 
         text_result = response.text
+        print("📥 Geminiからの応答:", text_result)
+
+        # JSON部分だけをきれいに抽出
         clean_json = re.sub(r"```json|```", "", text_result).strip()
+        
+        # 配列部分だけを安全に抜き出すための正規表現マッチ
+        match = re.search(r'\[.*\]', clean_json, re.DOTALL)
+        if match:
+            clean_json = match.group(0)
 
         return json.loads(clean_json)
+
     except Exception as e:
-        print("Gemini Server Error:", str(e))
+        print("❌ Gemini Server Error:", str(e))
         return []
 
 # 静的ファイルとindex.htmlをルートに安全に自動配信
