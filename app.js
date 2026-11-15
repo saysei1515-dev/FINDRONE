@@ -97,7 +97,7 @@ window.stopCamera = function() {
 // ================= リアルタイム推論ループ =================
 async function predictWebcam() {
   if (!webcamRunning) return;
-  
+
   if (video.videoWidth > 0 && video.videoHeight > 0) {
     const displayWidth = video.clientWidth;
     const displayHeight = video.clientHeight;
@@ -109,7 +109,7 @@ async function predictWebcam() {
 
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
-    
+
     const now = Date.now();
     // 約3秒に1回サーバーへ送信
     if (now - lastSaveTime > 3000) {
@@ -123,9 +123,9 @@ async function predictWebcam() {
         const base64Image = tempCanvas.toDataURL("image/jpeg").split(",")[1];
 
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
-        
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         if (detections && detections.length > 0) {
           status.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
           status.style.color = "#00ff00";
@@ -180,16 +180,16 @@ async function detectObjectWithGemini(base64Image, searchQuery) {
       method: "POST",
       body: formData
     });
-    const result = await response.json();
-console.log("Geminiからの受信データ:", result);
-    
+
     if (!response.ok) {
       console.error("サーバー応答エラー:", response.status);
       return [];
     }
 
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
+    const result = await response.json();
+    console.log("Geminiからの受信データ:", result);
+
+    return Array.isArray(result) ? result : [];
   } catch (err) {
     console.error("fetchエラー:", err);
     return [];
