@@ -31,8 +31,8 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
         if not image_bytes:
             return []
 
-        # モデル名を最新の flash モデルに変更
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # ログの指示に合わせた最新モデルを指定
+        model = genai.GenerativeModel("models/gemini-2.5-flash")
 
         prompt = f"""この画像の中から「{query}」を探してください。
 見つかった場合は、その物体の位置をバウンディングボックス（左上と右下の座標、0から1000の正規化座標）で示し、次のJSON配列の形式だけで正確に答えてください。余計な文章は一切含めないこと。
