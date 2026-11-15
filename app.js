@@ -8,9 +8,8 @@ let conn = null;
 
 let video, canvas, ctx, status, startButton, stopButton, connStatus;
 
-// ページ全体の読み込みが完了してから初期化を実行する（これでフリーズを防止）
+// ページ全体の読み込みが完了してから安全に初期化を実行
 window.addEventListener('DOMContentLoaded', () => {
-  // DOM要素の取得
   video = document.getElementById("video");
   canvas = document.getElementById("outputCanvas");
   if (canvas) ctx = canvas.getContext("2d");
@@ -19,7 +18,6 @@ window.addEventListener('DOMContentLoaded', () => {
   stopButton = document.getElementById("stopButton");
   connStatus = document.getElementById("connectionStatus");
 
-  // PeerJS初期化（安全に例外処理）
   try {
     peer = new Peer();
     peer.on('open', (id) => {
@@ -48,7 +46,6 @@ window.addEventListener('DOMContentLoaded', () => {
     console.error("Peer初期化失敗:", e);
   }
 
-  // 初期化完了メッセージ
   if (status) {
     status.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
     status.style.color = "#00ff00";
