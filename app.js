@@ -3,7 +3,7 @@ let lastVideoTime = -1;
 let currentSearchWord = "赤い財布";
 let lastSaveTime = 0; 
 
-// ▼ 追加：枠を画面に消えずに残し続けるための最小限の変数
+// 枠を画面に消えずに残し続けるための変数
 let cachedDetections = [];
 let boxExpireTime = 0;
 
@@ -157,16 +157,27 @@ async function predictWebcam() {
       lastSaveTime = now;
       try {
         const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = video.videoWidth;
-        tempCanvas.height = video.videoHeight;
+        
+        // ▼ ここを変更：高解像度のまま送らず、最大幅640pxに軽量化して高速化
+        const MAX_WIDTH = 640;
+        let targetWidth = video.videoWidth;
+        let targetHeight = video.videoHeight;
+        if (targetWidth > MAX_WIDTH) {
+          targetHeight = Math.round((targetHeight * MAX_WIDTH) / targetWidth);
+          targetWidth = MAX_WIDTH;
+        }
+        tempCanvas.width = targetWidth;
+        tempCanvas.height = targetHeight;
+        
         const tempCtx = tempCanvas.getContext("2d");
         tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-        const base64Image = tempCanvas.toDataURL("image/jpeg").split(",")[1];
+        
+        // 画質も0.8にしてデータ量をさらにスリム化
+        const base64Image = tempCanvas.toDataURL("image/jpeg", 0.8).split(",")[1];
 
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
 
         if (detections && detections.length > 0) {
-          // ▼ 発見したデータを保持し、2.5秒間消えないようにタイマーをセット
           cachedDetections = detections;
           boxExpireTime = Date.now() + 2500;
 
@@ -182,7 +193,7 @@ async function predictWebcam() {
     }
   }
 
-  // ▼ 毎フレームの描画処理（有効期限内であれば枠を維持して描き続ける）
+  // 毎フレームの描画処理（有効期限内であれば枠を維持して描き続ける）
   if (ctx && canvas) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
