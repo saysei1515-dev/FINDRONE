@@ -4,7 +4,6 @@ import re
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 import google.generativeai as genai
 
 app = FastAPI()
@@ -31,7 +30,6 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
         if not image_bytes:
             return []
 
-        # ログの指示に合わせた最新モデルを指定
         model = genai.GenerativeModel("models/gemini-3.8-flash")
 
         prompt = f"""この画像の中から「{query}」を探してください。
@@ -53,10 +51,5 @@ async def detect_gemini(file: UploadFile = File(...), query: str = Form(...)):
         print("Gemini Server Error:", str(e))
         return []
 
-@app.get("/")
-def read_root():
-    if os.path.exists("index.html"):
-        return FileResponse("index.html")
-    return {"status": "FINDRONE Gemini Server is running live!"}
-
-app.mount("/", StaticFiles(directory="."), name="static")
+# 静的ファイルとindex.htmlをルートに安全に自動配信
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
