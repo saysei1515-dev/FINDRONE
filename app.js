@@ -3,10 +3,9 @@ let lastVideoTime = -1;
 let currentSearchWord = "赤い財布";
 let lastSaveTime = 0; 
 
-// ▼ 追加: 検出した枠を画面に保持するための変数
-let lastDetections = [];
-let detectionExpiryTime = 0;
-const DISPLAY_DURATION = 2500; // 枠を表示し続ける時間（ミリ秒：2.5秒）
+// ▼ 追加：枠を画面に消えずに残し続けるための最小限の変数
+let cachedDetections = [];
+let boxExpireTime = 0;
 
 let peer = null;
 let conn = null;
@@ -128,7 +127,7 @@ window.startCamera = function() {
 window.stopCamera = function() {
   if (conn && conn.open) conn.send({ action: 'stop' });
   webcamRunning = false;
-  lastDetections = []; // 停止時にクリア
+  cachedDetections = []; // 停止時にクリア
   if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
   if (video) video.srcObject = null;
   if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -150,12 +149,10 @@ async function predictWebcam() {
     }
   }
 
-  const now = Date.now();
-
-  // 1. 一定間隔（3秒）ごとにサーバーへ画像を送って検出を行う
   if (video && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
 
+    const now = Date.now();
     if (now - lastSaveTime > 3000) {
       lastSaveTime = now;
       try {
@@ -169,18 +166,15 @@ async function predictWebcam() {
         const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
 
         if (detections && detections.length > 0) {
-          // 発見した場合はデータを保持し、有効期限を更新
-          lastDetections = detections;
-          detectionExpiryTime = now + DISPLAY_DURATION;
+          // ▼ 発見したデータを保持し、2.5秒間消えないようにタイマーをセット
+          cachedDetections = detections;
+          boxExpireTime = Date.now() + 2500;
 
           if (statusBox) {
             statusBox.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
             statusBox.style.color = "#00ff00";
           }
           addGalleryThumbnail(tempCanvas.toDataURL("image/jpeg"));
-        } else {
-          // 見つからなくても、すぐに消さずに有効期限内なら保持する判定も可能ですが、
-          // ここでは新しく見つからなかった場合は次回の判定に委ねます
         }
       } catch (err) {
         console.error("サーバー通信エラー:", err);
@@ -188,15 +182,15 @@ async function predictWebcam() {
     }
   }
 
-  // 2. 毎フレームの描画処理（有効期限内であれば枠を表示し続ける）
+  // ▼ 毎フレームの描画処理（有効期限内であれば枠を維持して描き続ける）
   if (ctx && canvas) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (now < detectionExpiryTime && lastDetections.length > 0) {
+    if (Date.now() < boxExpireTime && cachedDetections.length > 0) {
       const scaleX = canvas.width / video.videoWidth;
       const scaleY = canvas.height / video.videoHeight;
 
-      lastDetections.forEach(det => {
+      cachedDetections.forEach(det => {
         const [ymin, xmin, ymax, xmax] = det.box_2d;
         const x = (xmin / 1000) * video.videoWidth * scaleX;
         const y = (ymin / 1000) * video.videoHeight * scaleY;
@@ -212,11 +206,6 @@ async function predictWebcam() {
         ctx.font = "bold 14px sans-serif";
         ctx.fillText(det.label || currentSearchWord, x + 5, y > 25 ? y - 7 : 18);
       });
-    } else {
-      if (statusBox && webcamRunning && statusBox.innerText.includes("発見")) {
-        statusBox.innerText = `🔍 「${currentSearchWord}」を探索中...`;
-        statusBox.style.color = "#aaa";
-      }
     }
   }
 
