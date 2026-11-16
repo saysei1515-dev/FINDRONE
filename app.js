@@ -73,7 +73,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         encoder_model: 'q4',
         decoder_model_merged: 'q4',
       },
-      device: 'webgpu',
+      device: 'wasm',
     });
 
     florenceProcessor = await AutoProcessor.from_pretrained(model_id);
