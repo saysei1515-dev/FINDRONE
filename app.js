@@ -12,8 +12,14 @@ let conn = null;
 
 let video, canvas, ctx, statusBox, startButton, stopButton, connStatus;
 
+// ▼ Florence-2 用の変数
+let florenceModel = null;
+let florenceProcessor = null;
+let florenceTokenizer = null;
+let isModelLoaded = false;
+
 // ページ全体の読み込みが完了してから安全に初期化を実行
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   video = document.getElementById("video");
   canvas = document.getElementById("outputCanvas");
   if (canvas) ctx = canvas.getContext("2d");
@@ -50,9 +56,40 @@ window.addEventListener('DOMContentLoaded', () => {
     console.error("Peer初期化失敗:", e);
   }
 
+  // ▼ Florence-2 モデルの事前ロード開始
   if (statusBox) {
-    statusBox.innerText = "ステータス: 準備完了（Renderサーバー経由モード）";
-    statusBox.style.color = "#00ff00";
+    statusBox.innerText = "ステータス: AIモデル(Florence-2)をロード中...";
+    statusBox.style.color = "#ffc107";
+  }
+
+  try {
+    const { AutoProcessor, AutoTokenizer, Florence2ForConditionalGeneration } = window.Florence2Helper;
+    const model_id = 'onnx-community/Florence-2-base-ft';
+    
+    florenceModel = await Florence2ForConditionalGeneration.from_pretrained(model_id, {
+      dtype: {
+        embed_tokens: 'fp16',
+        vision_encoder: 'fp16',
+        encoder_model: 'q4',
+        decoder_model_merged: 'q4',
+      },
+      device: 'webgpu',
+    });
+
+    florenceProcessor = await AutoProcessor.from_pretrained(model_id);
+    florenceTokenizer = await AutoTokenizer.from_pretrained(model_id);
+    isModelLoaded = true;
+
+    if (statusBox) {
+      statusBox.innerText = "ステータス: 準備完了（Florence-2ブラウザ実行モード）";
+      statusBox.style.color = "#00ff00";
+    }
+  } catch (err) {
+    console.error("Florence-2モデルのロードに失敗:", err);
+    if (statusBox) {
+      statusBox.innerText = "ステータス: AIモデルのロードに失敗しました";
+      statusBox.style.color = "#dc3545";
+    }
   }
 });
 
@@ -89,7 +126,7 @@ window.connectToPC = function() {
       startButton.disabled = false;
       startButton.innerText = "遠隔カメラ起動 & 探索スタート";
     }
-    if (statusBox) {
+    if (statusBox && isModelLoaded) {
       statusBox.innerText = "ステータス: 準備完了";
       statusBox.style.color = "#00ff00";
     }
@@ -127,7 +164,7 @@ window.startCamera = function() {
 window.stopCamera = function() {
   if (conn && conn.open) conn.send({ action: 'stop' });
   webcamRunning = false;
-  cachedDetections = []; // 停止時にクリア
+  cachedDetections = [];
   if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
   if (video) video.srcObject = null;
   if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -153,12 +190,12 @@ async function predictWebcam() {
     lastVideoTime = video.currentTime;
 
     const now = Date.now();
-    if (now - lastSaveTime > 3000) {
+    // 処理間隔を調整（Florence-2の負荷を考慮して3秒おき）
+    if (now - lastSaveTime > 3000 && isModelLoaded) {
       lastSaveTime = now;
       try {
         const tempCanvas = document.createElement("canvas");
-        
-        // ▼ ここを変更：高解像度のまま送らず、最大幅640pxに軽量化して高速化
+
         const MAX_WIDTH = 640;
         let targetWidth = video.videoWidth;
         let targetHeight = video.videoHeight;
@@ -168,14 +205,14 @@ async function predictWebcam() {
         }
         tempCanvas.width = targetWidth;
         tempCanvas.height = targetHeight;
-        
+
         const tempCtx = tempCanvas.getContext("2d");
         tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-        
-        // 画質も0.8にしてデータ量をさらにスリム化
-        const base64Image = tempCanvas.toDataURL("image/jpeg", 0.8).split(",")[1];
 
-        const detections = await detectObjectWithGemini(base64Image, currentSearchWord);
+        const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.8);
+
+        // ▼ Florence-2によるローカル推論の実行
+        const detections = await detectObjectWithFlorence(dataUrl, currentSearchWord);
 
         if (detections && detections.length > 0) {
           cachedDetections = detections;
@@ -185,15 +222,15 @@ async function predictWebcam() {
             statusBox.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
             statusBox.style.color = "#00ff00";
           }
-          addGalleryThumbnail(tempCanvas.toDataURL("image/jpeg"));
+          addGalleryThumbnail(dataUrl);
         }
       } catch (err) {
-        console.error("サーバー通信エラー:", err);
+        console.error("Florence-2推論エラー:", err);
       }
     }
   }
 
-  // 毎フレームの描画処理（有効期限内であれば枠を維持して描き続ける）
+  // 毎フレームの描画処理
   if (ctx && canvas) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -202,11 +239,12 @@ async function predictWebcam() {
       const scaleY = canvas.height / video.videoHeight;
 
       cachedDetections.forEach(det => {
-        const [ymin, xmin, ymax, xmax] = det.box_2d;
-        const x = (xmin / 1000) * video.videoWidth * scaleX;
-        const y = (ymin / 1000) * video.videoHeight * scaleY;
-        const w = ((xmax - xmin) / 1000) * video.videoWidth * scaleX;
-        const h = ((ymax - ymin) / 1000) * video.videoHeight * scaleY;
+        // Florence-2の出力座標形式 [x1, y1, x2, y2] に対応
+        const [x1, y1, x2, y2] = det.box_2d;
+        const x = x1 * scaleX;
+        const y = y1 * scaleY;
+        const w = (x2 - x1) * scaleX;
+        const h = (y2 - y1) * scaleY;
 
         ctx.strokeStyle = "#00ff00";
         ctx.lineWidth = 4;
@@ -225,29 +263,41 @@ async function predictWebcam() {
   }
 }
 
-async function detectObjectWithGemini(base64Image, searchQuery) {
+// ▼ Florence-2 専用の推論関数（サーバー通信なし・ブラウザ内完結）
+async function detectObjectWithFlorence(dataUrl, searchQuery) {
+  if (!isModelLoaded) return [];
   try {
-    const res = await fetch(`data:image/jpeg;base64,${base64Image}`);
-    const blob = await res.blob();
+    const { RawImage } = window.Florence2Helper;
+    const image = await RawImage.fromURL(dataUrl);
 
-    const formData = new FormData();
-    formData.append("file", blob, "image.jpg");
-    formData.append("query", searchQuery);
+    const task = '<CAPTION_TO_PHRASE_GROUNDING>';
+    const prompt = task + searchQuery; // 例: "<CAPTION_TO_PHRASE_GROUNDING>red wallet"
 
-    const response = await fetch('/detect-gemini', {
-      method: "POST",
-      body: formData
+    const text_inputs = florenceTokenizer(prompt);
+    const vision_inputs = await florenceProcessor(image);
+
+    const generated_ids = await florenceModel.generate({
+      ...text_inputs,
+      ...vision_inputs,
+      max_new_tokens: 100,
     });
 
-    if (!response.ok) {
-      console.error("サーバー応答エラー:", response.status);
-      return [];
-    }
+    const generated_text = florenceTokenizer.batch_decode(generated_ids, { skip_special_tokens: false })[0];
+    const result = florenceProcessor.post_process_generation(generated_text, task, image.size);
 
-    const result = await response.json();
-    return Array.isArray(result) ? result : [];
+    const parsed = result[task] || { bboxes: [], labels: [] };
+
+    // 既存コードの形式（{ box_2d: [x1, y1, x2, y2], label: ... }）に変換して返す
+    const detections = [];
+    for (let i = 0; i < parsed.bboxes.length; i++) {
+      detections.push({
+        box_2d: parsed.bboxes[i],
+        label: parsed.labels[i] || searchQuery
+      });
+    }
+    return detections;
   } catch (err) {
-    console.error("fetchエラー:", err);
+    console.error("Florence処理失敗:", err);
     return [];
   }
 }
