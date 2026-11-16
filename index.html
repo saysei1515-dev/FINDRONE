@@ -3,18 +3,178 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FINDRONE - AI 探索カメラ (Gemini連携)</title>
-  <link rel="stylesheet" href="./style.css">
+  <title>FINDRONE - Florence-2 探索カメラ</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  
+  <!-- Transformers.js (ES Modules) の読み込み -->
+  <script type="module">
+    import { AutoProcessor, AutoTokenizer, Florence2ForConditionalGeneration, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0';
+    window.Florence2Helper = { AutoProcessor, AutoTokenizer, Florence2ForConditionalGeneration, RawImage };
+  </script>
+
+  <style>
+    /* 全体のレイアウトとリセット */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      background: #1e1e1e;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      box-sizing: border-box;
+    }
+    h1 {
+      font-size: 1.25rem;
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #ffffff;
+    }
+    /* 🔗 タブメニュー */
+    .tab-menu {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 15px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: #2c2c2c;
+      color: #aaa;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .tab-btn.active {
+      background: #007bff;
+      color: #fff;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    /* 制御グループ・フォーム要素 */
+    .control-group {
+      margin-bottom: 12px;
+      background: #252525;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+    .control-group label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 5px;
+      color: #ccc;
+      font-weight: bold;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 8px 10px;
+      background: #181818;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus, select:focus {
+      border-color: #007bff;
+      outline: none;
+    }
+    /* カメラコンテナ */
+    .camera-container {
+      position: relative;
+      width: 100%;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    /* ボタン関係 */
+    .button-group {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      cursor: pointer;
+    }
+    .primary-btn {
+      width: 100%;
+      padding: 12px;
+      background: #28a745;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 15px;
+    }
+    .primary-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .danger-btn {
+      width: 100%;
+      padding: 12px;
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 15px;
+    }
+    /* ステータス・ギャラリー */
+    .status-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #252525;
+      border-radius: 6px;
+      font-size: 13px;
+      text-align: center;
+      color: #ffc107;
+      border: 1px solid #333;
+    }
+    .gallery {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 5px 0;
+      min-height: 90px;
+      background: #181818;
+      border-radius: 6px;
+      border: 1px dashed #333;
+    }
+  </style>
 </head>
 <body>
   <div class="app-container">
-    <h1>🔍 AI探偵カメラ (Gemini連携)</h1>
+    <h1>🔍 Florence-2 探索カメラ</h1>
     <div class="tab-menu">
       <button class="tab-btn active" onclick="switchTab('search')">🔍 探索モード</button>
       <button class="tab-btn" onclick="switchTab('register')" style="display:none;">📦 物体登録モード</button>
     </div>
+    
     <div id="searchTab" class="tab-content active">
       <div class="control-group" style="border: 2px solid #007bff; background: #f0f7ff;">
         <label for="pcIdInput" style="color: #007bff;">🔗 PC接続用ID:</label>
@@ -29,35 +189,362 @@
         <div id="qr-reader" style="width: 100%; max-width: 260px; margin: 10px auto; display: none;"></div>
         <div id="connectionStatus" style="font-size: 12px; color: #666; margin-top: 5px;">ステータス: 未接続</div>
       </div>
+
       <div class="control-group" style="position: relative;">
-        <label for="targetObject">探すもの (例: 赤い鞄, 男の人):</label>
+        <label for="targetObject">探すもの (例: red wallet, man):</label>
         <div style="display: flex; gap: 5px;">
-          <input type="text" id="targetObject" value="赤い財布" placeholder="例: 赤い財布" autocomplete="off" style="flex: 1;">
+          <input type="text" id="targetObject" value="red wallet" placeholder="例: red wallet" autocomplete="off" style="flex: 1;">
           <button onclick="updateTarget()" style="padding: 0 15px; background: #007bff; color: #fff; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">決定</button>
         </div>
-        <div id="quickSelectList" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;"></div>
       </div>
 
-      <div class="camera-container" style="position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden;">
+      <div class="camera-container">
         <video id="video" autoplay muted playsinline style="width: 100%; display: block;"></video>
         <canvas id="outputCanvas" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
       </div>
+
       <div class="button-group" style="margin-top: 10px;">
         <button id="startButton" class="primary-btn" onclick="startCamera()" disabled>PCと接続してください</button>
         <button id="stopButton" class="danger-btn" onclick="stopCamera()" style="display:none;">停止</button>
       </div>
+
       <div id="status" class="status-box">ステータス: 初期化中...</div>
+
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
         <h3 style="margin: 0; font-size: 14px;">📁 発見したアイテムの履歴</h3>
         <button onclick="clearGallery()" style="padding: 5px 10px; background: #dc3545; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">履歴クリア</button>
       </div>
-      <div id="imageGallery" class="gallery" style="display: flex; gap: 10px; overflow-x: auto; padding: 10px 0;"></div>
+      <div id="imageGallery" class="gallery"></div>
     </div>
   </div>
 
-  <script>
+  <!-- 画像プレビューモーダル -->
+  <div id="imagePreviewModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; flex-direction: column;" onclick="closePreview()">
+    <img id="previewImage" style="max-width: 90%; max-height: 80%; border-radius: 8px; border: 3px solid #00ff00; object-fit: contain;">
+    <div style="color: #fff; margin-top: 15px; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 4px;">画面をタップして閉じる</div>
+  </div>
+
+  <!-- メインロジック (Type Module) -->
+  <script type="module">
+    let webcamRunning = false;
+    let lastVideoTime = -1;
+    let currentSearchWord = "red wallet";
+    let lastSaveTime = 0; 
+
+    let cachedDetections = [];
+    let boxExpireTime = 0;
+
+    let peer = null;
+    let conn = null;
+
+    let video, canvas, ctx, statusBox, startButton, stopButton, connStatus;
+
+    // Florence-2 用の変数
+    let florenceModel = null;
+    let florenceProcessor = null;
+    let florenceTokenizer = null;
+    let isModelLoaded = false;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      video = document.getElementById("video");
+      canvas = document.getElementById("outputCanvas");
+      if (canvas) ctx = canvas.getContext("2d");
+      statusBox = document.getElementById("status");
+      startButton = document.getElementById("startButton");
+      stopButton = document.getElementById("stopButton");
+      connStatus = document.getElementById("connectionStatus");
+
+      try {
+        peer = new Peer();
+        peer.on('open', (id) => {
+          console.log("PeerJS Connected, ID:", id);
+        });
+        peer.on('error', (err) => {
+          console.error("PeerJSエラー:", err);
+        });
+        peer.on('call', (call) => {
+          call.answer();
+          call.on('stream', (remoteStream) => {
+            if (video) {
+              video.srcObject = remoteStream;
+              webcamRunning = true;
+              if (startButton) startButton.style.display = "none";
+              if (stopButton) stopButton.style.display = "block";
+              if (statusBox) {
+                statusBox.innerText = `ステータス: 「${currentSearchWord}」を探索中...`;
+                statusBox.style.color = "#00ff00";
+              }
+              video.onloadeddata = () => { predictWebcam(); };
+            }
+          });
+        });
+      } catch (e) {
+        console.error("Peer初期化失敗:", e);
+      }
+
+      // Florence-2 モデルのロード開始
+      if (statusBox) {
+        statusBox.innerText = "ステータス: AIモデル(Florence-2)をロード中...";
+        statusBox.style.color = "#ffc107";
+      }
+
+      try {
+        const { AutoProcessor, AutoTokenizer, Florence2ForConditionalGeneration } = window.Florence2Helper;
+        const model_id = 'onnx-community/Florence-2-base-ft';
+        
+        florenceModel = await Florence2ForConditionalGeneration.from_pretrained(model_id, {
+          dtype: {
+            embed_tokens: 'fp16',
+            vision_encoder: 'fp16',
+            encoder_model: 'q4',
+            decoder_model_merged: 'q4',
+          },
+          device: 'webgpu',
+        });
+
+        florenceProcessor = await AutoProcessor.from_pretrained(model_id);
+        florenceTokenizer = await AutoTokenizer.from_pretrained(model_id);
+        isModelLoaded = true;
+
+        if (statusBox) {
+          statusBox.innerText = "ステータス: 準備完了（Florence-2ブラウザ実行モード）";
+          statusBox.style.color = "#00ff00";
+        }
+      } catch (err) {
+        console.error("Florence-2モデルのロードに失敗:", err);
+        if (statusBox) {
+          statusBox.innerText = "ステータス: AIモデルのロードに失敗しました (WebGPU未対応の可能性があります)";
+          statusBox.style.color = "#dc3545";
+        }
+      }
+    });
+
+    window.switchTab = function(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      if (tabName === 'search') {
+        document.querySelector('.tab-menu button:nth-child(1)').classList.add('active');
+        document.getElementById('searchTab').classList.add('active');
+      } else {
+        document.querySelector('.tab-menu button:nth-child(2)').classList.add('active');
+        document.getElementById('registerTab').classList.add('active');
+      }
+    };
+
+    window.connectToPC = function() {
+      const pcIdInput = document.getElementById("pcIdInput");
+      if (!pcIdInput) return;
+      const pcId = pcIdInput.value.trim();
+      if (!pcId) { alert("PCのIDを入力してください！"); return; }
+      if (connStatus) {
+        connStatus.innerText = "ステータス: 接続中...";
+        connStatus.style.color = "#ffc107";
+      }
+      conn = peer.connect(pcId);
+      conn.on('open', () => {
+        if (connStatus) {
+          connStatus.innerText = "ステータス: 接続完了 ✅";
+          connStatus.style.color = "#28a745";
+        }
+        if (startButton) {
+          startButton.disabled = false;
+          startButton.innerText = "遠隔カメラ起動 & 探索スタート";
+        }
+        if (statusBox && isModelLoaded) {
+          statusBox.innerText = "ステータス: 準備完了";
+          statusBox.style.color = "#00ff00";
+        }
+      });
+    };
+
+    window.updateTarget = function() {
+      const targetObj = document.getElementById("targetObject");
+      if (!targetObj) return;
+      const inputVal = targetObj.value.trim();
+      if (!inputVal) { alert("探すものを入力してください！"); return; }
+      currentSearchWord = inputVal;
+      if (statusBox) {
+        statusBox.innerText = `🎯 「${currentSearchWord}」を探します`;
+        statusBox.style.color = "#00ff00";
+      }
+    };
+
+    window.startCamera = function() {
+      const targetObj = document.getElementById("targetObject");
+      if (!targetObj) return;
+      const inputVal = targetObj.value.trim();
+      if (!inputVal) {
+        alert("探すものを入力してください！");
+        targetObj.focus();
+        return;
+      }
+      if (!conn || !conn.open) { alert("先にPCと接続してください！"); return; }
+      currentSearchWord = inputVal;
+      conn.send({ action: 'start', keyword: currentSearchWord, smartphoneId: peer.id });
+      if (statusBox) statusBox.innerText = "ステータス: 遠隔カメラ起動要求を送信中...";
+    };
+
+    window.stopCamera = function() {
+      if (conn && conn.open) conn.send({ action: 'stop' });
+      webcamRunning = false;
+      cachedDetections = [];
+      if (video && video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+      if (video) video.srcObject = null;
+      if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (stopButton) stopButton.style.display = "none";
+      if (startButton) startButton.style.display = "block";
+      if (statusBox) statusBox.innerText = "ステータス: 停止しました";
+    };
+
+    async function predictWebcam() {
+      if (!webcamRunning) return;
+
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        const displayWidth = video.clientWidth;
+        const displayHeight = video.clientHeight;
+        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+        }
+      }
+
+      if (video && video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
+
+        const now = Date.now();
+        if (now - lastSaveTime > 3000 && isModelLoaded) {
+          lastSaveTime = now;
+          try {
+            const tempCanvas = document.createElement("canvas");
+            const MAX_WIDTH = 640;
+            let targetWidth = video.videoWidth;
+            let targetHeight = video.videoHeight;
+            if (targetWidth > MAX_WIDTH) {
+              targetHeight = Math.round((targetHeight * MAX_WIDTH) / targetWidth);
+              targetWidth = MAX_WIDTH;
+            }
+            tempCanvas.width = targetWidth;
+            tempCanvas.height = targetHeight;
+
+            const tempCtx = tempCanvas.getContext("2d");
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.8);
+            const detections = await detectObjectWithFlorence(dataUrl, currentSearchWord);
+
+            if (detections && detections.length > 0) {
+              cachedDetections = detections;
+              boxExpireTime = Date.now() + 2500;
+
+              if (statusBox) {
+                statusBox.innerText = `🎉 「${currentSearchWord}」を発見しました！`;
+                statusBox.style.color = "#00ff00";
+              }
+              addGalleryThumbnail(dataUrl);
+            }
+          } catch (err) {
+            console.error("Florence-2推論エラー:", err);
+          }
+        }
+      }
+
+      if (ctx && canvas) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (Date.now() < boxExpireTime && cachedDetections.length > 0) {
+          const scaleX = canvas.width / video.videoWidth;
+          const scaleY = canvas.height / video.videoHeight;
+
+          cachedDetections.forEach(det => {
+            const [x1, y1, x2, y2] = det.box_2d;
+            const x = x1 * scaleX;
+            const y = y1 * scaleY;
+            const w = (x2 - x1) * scaleX;
+            const h = (y2 - y1) * scaleY;
+
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = "rgba(0, 255, 0, 0.7)";
+            ctx.fillRect(x, y > 25 ? y - 25 : 0, w, 25);
+            ctx.fillStyle = "#000";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(det.label || currentSearchWord, x + 5, y > 25 ? y - 7 : 18);
+          });
+        }
+      }
+
+      if (webcamRunning) {
+        window.requestAnimationFrame(predictWebcam);
+      }
+    }
+
+    async function detectObjectWithFlorence(dataUrl, searchQuery) {
+      if (!isModelLoaded) return [];
+      try {
+        const { RawImage } = window.Florence2Helper;
+        const image = await RawImage.fromURL(dataUrl);
+
+        const task = '<CAPTION_TO_PHRASE_GROUNDING>';
+        const prompt = task + searchQuery;
+
+        const text_inputs = florenceTokenizer(prompt);
+        const vision_inputs = await florenceProcessor(image);
+
+        const generated_ids = await florenceModel.generate({
+          ...text_inputs,
+          ...vision_inputs,
+          max_new_tokens: 100,
+        });
+
+        const generated_text = florenceTokenizer.batch_decode(generated_ids, { skip_special_tokens: false })[0];
+        const result = florenceProcessor.post_process_generation(generated_text, task, image.size);
+
+        const parsed = result[task] || { bboxes: [], labels: [] };
+
+        const detections = [];
+        for (let i = 0; i < parsed.bboxes.length; i++) {
+          detections.push({
+            box_2d: parsed.bboxes[i],
+            label: parsed.labels[i] || searchQuery
+          });
+        }
+        return detections;
+      } catch (err) {
+        console.error("Florence処理失敗:", err);
+        return [];
+      }
+    }
+
+    function addGalleryThumbnail(dataUrl) {
+      const gallery = document.getElementById("imageGallery");
+      if (!gallery) return;
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.style.cssText = "width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #00ff00; cursor: pointer; flex-shrink: 0;";
+      img.onclick = () => {
+        const modal = document.getElementById("imagePreviewModal");
+        const previewImg = document.getElementById("previewImage");
+        if (modal && previewImg) {
+          previewImg.src = dataUrl;
+          modal.style.display = "flex";
+        }
+      };
+      gallery.prepend(img);
+    }
+
+    window.closePreview = function() {
+      const modal = document.getElementById("imagePreviewModal");
+      if (modal) modal.style.display = "none";
+    };
+
+    window.clearGallery = function() {
+      const gallery = document.getElementById("imageGallery");
+      if (gallery) gallery.innerHTML = "";
+    };
+
     let html5QrCode = null;
-    function startQrScanner() {
+    window.startQrScanner = function() {
       const readerContainer = document.getElementById("qr-reader");
       readerContainer.style.display = "block";
       if (!html5QrCode) {
@@ -68,15 +555,16 @@
         { fps: 10, qrbox: { width: 200, height: 200 } },
         (decodedText) => {
           document.getElementById("pcIdInput").value = decodedText;
-          stopQrScanner();
+          window.stopQrScanner();
           alert("PCのIDを読み込みました！「接続」ボタンを押してください。");
         },
         (errorMessage) => {}
       ).catch(err => {
         alert("カメラの起動に失敗しました: " + err);
       });
-    }
-    function stopQrScanner() {
+    };
+
+    window.stopQrScanner = function() {
       if (html5QrCode) {
         html5QrCode.stop().then(() => {
           const readerContainer = document.getElementById("qr-reader");
@@ -85,15 +573,8 @@
           console.error("QRスキャナーの停止に失敗しました:", err);
         });
       }
-    }
+    };
   </script>
-
-  <script src="./app.js"></script>
-
-  <div id="imagePreviewModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; flex-direction: column;" onclick="closePreview()">
-    <img id="previewImage" style="max-width: 90%; max-height: 80%; border-radius: 8px; border: 3px solid #00ff00; object-fit: contain;">
-    <div style="color: #fff; margin-top: 15px; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 4px;">画面をタップして閉じる</div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
