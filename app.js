@@ -196,7 +196,7 @@ async function predictWebcam() {
       try {
         const tempCanvas = document.createElement("canvas");
 
-        const MAX_WIDTH = 640;
+        const MAX_WIDTH = 320;
         let targetWidth = video.videoWidth;
         let targetHeight = video.videoHeight;
         if (targetWidth > MAX_WIDTH) {
